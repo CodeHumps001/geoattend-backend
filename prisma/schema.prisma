@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  LECTURER
+  ADMIN
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(STUDENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  student  Student?
+  lecturer Lecturer?
+}
+
+model Student {
+  id          Int          @id @default(autoincrement())
+  studentCode String       @unique
+  department  String
+  level       Int
+
+  userId      Int          @unique
+  user        User         @relation(fields: [userId], references: [id])
+
+  enrollments Enrollment[]
+  attendance  Attendance[]
+}
+
+model Lecturer {
+  id         Int      @id @default(autoincrement())
+  staffCode  String   @unique
+  department String
+
+  userId     Int      @unique
+  user       User     @relation(fields: [userId], references: [id])
+
+  courses    Course[]
+}
+
+model Course {
+  id          Int          @id @default(autoincrement())
+  code        String       @unique
+  name        String
+  department  String
+  semester    String
+  createdAt   DateTime     @default(now())
+
+  lecturerId  Int
+  lecturer    Lecturer     @relation(fields: [lecturerId], references: [id])
+
+  enrollments Enrollment[]
+  sessions    Session[]
+}
+
+model Enrollment {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+
+  studentId Int
+  courseId  Int
+  student   Student  @relation(fields: [studentId], references: [id])
+  course    Course   @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, courseId])
+}
+
+model Session {
+  id           Int          @id @default(autoincrement())
+  date         DateTime     @default(now())
+  startTime    DateTime
+  endTime      DateTime
+  latitude     Float
+  longitude    Float
+  radiusMeters Int          @default(100)
+
+  courseId     Int
+  course       Course       @relation(fields: [courseId], references: [id])
+
+  attendance   Attendance[]
+}
+
+model Attendance {
+  id        Int              @id @default(autoincrement())
+  markedAt  DateTime         @default(now())
+  latitude  Float
+  longitude Float
+  status    AttendanceStatus @default(PRESENT)
+
+  studentId Int
+  sessionId Int
+  student   Student          @relation(fields: [studentId], references: [id])
+  session   Session          @relation(fields: [sessionId], references: [id])
+
+  @@unique([studentId, sessionId])
+}
