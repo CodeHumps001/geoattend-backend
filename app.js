@@ -22,7 +22,7 @@ app.use(helmet());
 const corsOptions = {
   origin:
     process.env.NODE_ENV === "development"
-      ? "http://localhost:5173"
+      ? "http://localhost:3000"
       : process.env.FRONTEND_URL,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   allowedHeaders: ["Content-Type", "Authorization"],
