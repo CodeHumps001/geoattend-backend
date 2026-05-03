@@ -148,10 +148,50 @@ const getAttendancePercentage = async (req, res, next) => {
   }
 };
 
+// GET CURRENT STUDENT PROFILE
+const getMyStudentProfile = async (req, res, next) => {
+  try {
+    const student = await prisma.student.findUnique({
+      where: { userId: req.user.id },
+      include: {
+        user: { select: { name: true, email: true, role: true } },
+        enrollments: {
+          include: {
+            course: {
+              include: {
+                lecturer: {
+                  include: { user: { select: { name: true } } },
+                },
+                sessions: {
+                  include: { attendance: true },
+                },
+              },
+            },
+          },
+        },
+        attendance: {
+          include: { session: { include: { course: true } } },
+          orderBy: { markedAt: "desc" },
+          take: 10,
+        },
+      },
+    });
+
+    if (!student) {
+      return sendError(res, "Student profile not found", 404);
+    }
+
+    return sendSuccess(res, "Student profile retrieved", { student });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAllStudents,
   getStudentById,
   getStudentsByDepartment,
   deleteStudent,
   getAttendancePercentage,
+  getMyStudentProfile,
 };

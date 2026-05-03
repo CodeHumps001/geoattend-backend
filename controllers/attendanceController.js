@@ -177,30 +177,24 @@ const getSessionAttendance = async (req, res, next) => {
   }
 };
 
-// ─── GET ALL SESSIONS ────────────────────────────────
 const getAllSessions = async (req, res, next) => {
   try {
     const sessions = await prisma.session.findMany({
       include: {
-        course: {
-          select: {
-            id: true,
-            name: true,
-            code: true,
-            department: true,
-            semester: true,
+        course: true,
+        attendance: {
+          include: {
+            student: {
+              include: { user: { select: { name: true } } },
+            },
           },
         },
       },
       orderBy: { date: "desc" },
     });
-
     return sendSuccess(res, "Sessions retrieved successfully", { sessions });
   } catch (err) {
-    console.error("Error in getAllSessions:", err.message);
-    return sendSuccess(res, "Sessions retrieved successfully", {
-      sessions: [],
-    });
+    next(err);
   }
 };
 

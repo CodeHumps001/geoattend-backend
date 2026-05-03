@@ -8,6 +8,7 @@ const {
   getStudentsByDepartment,
   deleteStudent,
   getAttendancePercentage,
+  getMyStudentProfile,
 } = require("../controllers/studentController");
 
 // authenticate — must be logged in
@@ -15,6 +16,7 @@ const {
 
 // Any logged in user can view students
 router.get("/", authenticate, getAllStudents);
+router.get("/me", authenticate, authorize("STUDENT"), getMyStudentProfile);
 router.get("/department/:department", authenticate, getStudentsByDepartment);
 router.get("/:id", authenticate, getStudentById);
 router.get("/:id/attendance/:courseId", authenticate, getAttendancePercentage);

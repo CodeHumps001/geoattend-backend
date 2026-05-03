@@ -12,6 +12,7 @@ const authRoutes = require("./routes/authRoutes");
 const studentRoutes = require("./routes/studentRoutes");
 const courseRoutes = require("./routes/courseRoutes");
 const attendanceRoutes = require("./routes/attendanceRoutes");
+const lecturerRoutes = require("./routes/lecturerRoutes");
 
 const app = express();
 
@@ -70,6 +71,7 @@ app.use("/api/v1/auth", authLimiter, authRoutes);
 app.use("/api/v1/students", studentRoutes);
 app.use("/api/v1/courses", courseRoutes);
 app.use("/api/v1/attendance", attendanceRoutes);
+app.use("/api/v1/lecturers", lecturerRoutes);
 
 // ── Health Check ─────────────────────────────────────
 // Simple route to confirm the server is running
