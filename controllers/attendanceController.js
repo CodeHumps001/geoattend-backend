@@ -3,17 +3,6 @@ const { sendSuccess } = require("../utils/response");
 const AppError = require("../utils/AppError");
 
 // ─── HAVERSINE FORMULA ───────────────────────────────
-// This function calculates the real-world distance in metres
-// between two GPS coordinates.
-//
-// The Earth is a sphere so you can't just subtract coordinates —
-// you need trigonometry. The Haversine formula is the standard
-// way to do this calculation accurately.
-//
-// lat1, lon1 = first location (session/classroom)
-// lat2, lon2 = second location (student's phone)
-// returns distance in metres
-
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   const R = 6371000; // Earth's radius in metres
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -25,14 +14,10 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // distance in metres
+  return R * c;
 }
 
 // ─── START SESSION ───────────────────────────────────
-// Lecturer starts a class session
-// In production this GPS comes from the lecturer's phone automatically
-// For now we pass it manually in Postman for testing
-
 const startSession = async (req, res, next) => {
   try {
     const { courseId, startTime, endTime, latitude, longitude, radiusMeters } =
@@ -45,7 +30,6 @@ const startSession = async (req, res, next) => {
       );
     }
 
-    // Check course exists
     const course = await prisma.course.findUnique({
       where: { id: Number(courseId) },
     });
@@ -60,7 +44,6 @@ const startSession = async (req, res, next) => {
         endTime: new Date(endTime),
         latitude: Number(latitude),
         longitude: Number(longitude),
-        // use provided radius or default to 100 metres
         radiusMeters: radiusMeters ? Number(radiusMeters) : 100,
       },
     });
@@ -72,9 +55,6 @@ const startSession = async (req, res, next) => {
 };
 
 // ─── MARK ATTENDANCE ─────────────────────────────────
-// Student marks their attendance for a session
-// Their GPS coordinates are checked against the session location
-
 const markAttendance = async (req, res, next) => {
   try {
     const { studentId, sessionId, latitude, longitude } = req.body;
@@ -86,7 +66,6 @@ const markAttendance = async (req, res, next) => {
       );
     }
 
-    // Check session exists
     const session = await prisma.session.findUnique({
       where: { id: Number(sessionId) },
     });
@@ -94,7 +73,6 @@ const markAttendance = async (req, res, next) => {
       throw new AppError("Session not found", 404);
     }
 
-    // Check student exists
     const student = await prisma.student.findUnique({
       where: { id: Number(studentId) },
     });
@@ -102,7 +80,6 @@ const markAttendance = async (req, res, next) => {
       throw new AppError("Student not found", 404);
     }
 
-    // Check if attendance already marked for this session
     const existing = await prisma.attendance.findFirst({
       where: {
         studentId: Number(studentId),
@@ -113,7 +90,6 @@ const markAttendance = async (req, res, next) => {
       throw new AppError("Attendance already marked for this session", 409);
     }
 
-    // Calculate distance between student and classroom
     const distance = getDistanceInMeters(
       session.latitude,
       session.longitude,
@@ -121,8 +97,6 @@ const markAttendance = async (req, res, next) => {
       Number(longitude),
     );
 
-    // If student is within the allowed radius → PRESENT
-    // If student is too far away → ABSENT
     const status = distance <= session.radiusMeters ? "PRESENT" : "ABSENT";
 
     const attendance = await prisma.attendance.create({
@@ -157,8 +131,6 @@ const markAttendance = async (req, res, next) => {
 };
 
 // ─── GET SESSION ATTENDANCE ──────────────────────────
-// View all attendance records for a specific session
-
 const getSessionAttendance = async (req, res, next) => {
   try {
     const { sessionId } = req.params;
@@ -191,17 +163,91 @@ const getSessionAttendance = async (req, res, next) => {
   }
 };
 
-// GET ALL SESSIONS
+// ─── GET ALL SESSIONS - FIXED ────────────────────────
 const getAllSessions = async (req, res, next) => {
   try {
     const sessions = await prisma.session.findMany({
       include: {
-        course: true,
-        attendance: true,
+        course: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            department: true,
+            semester: true,
+            lecturerId: true,
+          },
+        },
+        attendance: {
+          select: {
+            id: true,
+            studentId: true,
+            status: true,
+            markedAt: true,
+          },
+        },
       },
-      orderBy: { date: "desc" },
+      orderBy: { startTime: "desc" }, // Fixed: using startTime instead of date
     });
+
+    console.log(`✅ Retrieved ${sessions.length} sessions`);
+
     return sendSuccess(res, "Sessions retrieved successfully", { sessions });
+  } catch (err) {
+    console.error("❌ Error in getAllSessions:", err.message);
+    console.error(err.stack);
+    next(err);
+  }
+};
+
+// ─── GET SESSIONS FOR A STUDENT'S ENROLLED COURSES ───
+const getStudentSessions = async (req, res, next) => {
+  try {
+    const { studentId } = req.params;
+
+    // Get student's enrolled courses
+    const student = await prisma.student.findUnique({
+      where: { id: Number(studentId) },
+      include: {
+        enrollments: {
+          select: { courseId: true },
+        },
+      },
+    });
+
+    if (!student) {
+      throw new AppError("Student not found", 404);
+    }
+
+    const enrolledCourseIds = student.enrollments.map((e) => e.courseId);
+
+    // Get sessions for enrolled courses
+    const sessions = await prisma.session.findMany({
+      where: {
+        courseId: { in: enrolledCourseIds },
+      },
+      include: {
+        course: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            department: true,
+            semester: true,
+          },
+        },
+        attendance: {
+          where: { studentId: Number(studentId) },
+          select: { id: true, status: true },
+        },
+      },
+      orderBy: { startTime: "desc" },
+    });
+
+    return sendSuccess(res, "Student sessions retrieved successfully", {
+      sessions,
+      enrolledCourseIds,
+    });
   } catch (err) {
     next(err);
   }
@@ -212,4 +258,5 @@ module.exports = {
   markAttendance,
   getSessionAttendance,
   getAllSessions,
+  getStudentSessions, // New helper function
 };
