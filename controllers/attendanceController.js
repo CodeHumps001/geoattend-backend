@@ -4,16 +4,17 @@ const AppError = require("../utils/AppError");
 
 // ─── HAVERSINE FORMULA ───────────────────────────────
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371000; // Earth's radius in metres
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const R = 6371e3;
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
   return R * c;
 }
 
@@ -66,7 +67,6 @@ const markAttendance = async (req, res, next) => {
       );
     }
 
-    // Validate IDs are numbers
     const parsedStudentId = Number(studentId);
     const parsedSessionId = Number(sessionId);
 
@@ -143,7 +143,6 @@ const getSessionAttendance = async (req, res, next) => {
   try {
     const { sessionId } = req.params;
 
-    // Validate sessionId exists and is a number
     if (!sessionId || isNaN(Number(sessionId))) {
       throw new AppError("Valid session ID is required", 400);
     }
@@ -181,8 +180,6 @@ const getSessionAttendance = async (req, res, next) => {
 // ─── GET ALL SESSIONS ────────────────────────────────
 const getAllSessions = async (req, res, next) => {
   try {
-    console.log("📡 Fetching all sessions...");
-
     const sessions = await prisma.session.findMany({
       include: {
         course: {
@@ -198,20 +195,16 @@ const getAllSessions = async (req, res, next) => {
       orderBy: { date: "desc" },
     });
 
-    console.log(`✅ Retrieved ${sessions.length} sessions`);
-
     return sendSuccess(res, "Sessions retrieved successfully", { sessions });
   } catch (err) {
-    console.error("❌ Error in getAllSessions:", err.message);
-
-    // Return empty array instead of failing
+    console.error("Error in getAllSessions:", err.message);
     return sendSuccess(res, "Sessions retrieved successfully", {
       sessions: [],
     });
   }
 };
 
-// ─── GET STUDENT SESSIONS (NEW HELPER) ───────────────
+// ─── GET STUDENT SESSIONS ────────────────────────────
 const getStudentSessions = async (req, res, next) => {
   try {
     const { studentId } = req.params;
@@ -222,7 +215,6 @@ const getStudentSessions = async (req, res, next) => {
 
     const parsedStudentId = Number(studentId);
 
-    // Get student's enrolled courses
     const student = await prisma.student.findUnique({
       where: { id: parsedStudentId },
       include: {
@@ -242,7 +234,6 @@ const getStudentSessions = async (req, res, next) => {
       return sendSuccess(res, "No enrolled courses found", { sessions: [] });
     }
 
-    // Get sessions for enrolled courses
     const sessions = await prisma.session.findMany({
       where: {
         courseId: { in: enrolledCourseIds },
@@ -261,32 +252,8 @@ const getStudentSessions = async (req, res, next) => {
       orderBy: { date: "desc" },
     });
 
-    // Check which sessions the student has already marked
-    const attendanceRecords = await prisma.attendance.findMany({
-      where: {
-        studentId: parsedStudentId,
-        sessionId: { in: sessions.map((s) => s.id) },
-      },
-      select: {
-        sessionId: true,
-        status: true,
-      },
-    });
-
-    const attendanceMap = new Map();
-    attendanceRecords.forEach((record) => {
-      attendanceMap.set(record.sessionId, record.status);
-    });
-
-    const sessionsWithStatus = sessions.map((session) => ({
-      ...session,
-      hasMarked: attendanceMap.has(session.id),
-      attendanceStatus: attendanceMap.get(session.id) || null,
-    }));
-
     return sendSuccess(res, "Student sessions retrieved successfully", {
-      sessions: sessionsWithStatus,
-      enrolledCourseIds,
+      sessions,
     });
   } catch (err) {
     console.error("Error in getStudentSessions:", err.message);
@@ -294,6 +261,7 @@ const getStudentSessions = async (req, res, next) => {
   }
 };
 
+// ─── EXPORT ──────────────────────────────────────────
 module.exports = {
   startSession,
   markAttendance,
