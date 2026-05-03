@@ -143,13 +143,8 @@ const getSessionAttendance = async (req, res, next) => {
   try {
     const { sessionId } = req.params;
 
-    // Log the full request URL and params for debugging
-    console.log("📡 getSessionAttendance called with params:", req.params);
-    console.log("📡 Full URL:", req.originalUrl);
-
     // Validate sessionId exists and is a number
     if (!sessionId || isNaN(Number(sessionId))) {
-      console.log("❌ Invalid sessionId received:", sessionId);
       throw new AppError("Valid session ID is required", 400);
     }
 
@@ -209,20 +204,10 @@ const getAllSessions = async (req, res, next) => {
   } catch (err) {
     console.error("❌ Error in getAllSessions:", err.message);
 
-    // Try fallback without course include
-    try {
-      console.log("🔄 Retrying without course include...");
-      const sessions = await prisma.session.findMany({
-        orderBy: { date: "desc" },
-      });
-      return sendSuccess(res, "Sessions retrieved successfully", { sessions });
-    } catch (fallbackErr) {
-      console.error("❌ Fallback also failed:", fallbackErr.message);
-      // Return empty array instead of failing
-      return sendSuccess(res, "Sessions retrieved successfully", {
-        sessions: [],
-      });
-    }
+    // Return empty array instead of failing
+    return sendSuccess(res, "Sessions retrieved successfully", {
+      sessions: [],
+    });
   }
 };
 

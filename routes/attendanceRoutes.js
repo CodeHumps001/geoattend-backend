@@ -6,7 +6,7 @@ const {
   markAttendance,
   getSessionAttendance,
   getAllSessions,
-  getStudentSessions, // Add this
+  getStudentSessions,
 } = require("../controllers/attendanceController");
 const authenticate = require("../middleware/authenticate");
 const authorize = require("../middleware/authorize");
@@ -16,6 +16,15 @@ const {
   startSessionSchema,
 } = require("../utils/validators");
 
+// ─── PUBLIC / SPECIFIC ROUTES (no parameters) ─────────
+// These must come BEFORE parameterized routes
+router.get("/session/all", authenticate, getAllSessions);
+
+// ─── PARAMETERIZED ROUTES (with :id) ─────────────────
+router.get("/session/:sessionId", authenticate, getSessionAttendance);
+router.get("/student/:studentId/sessions", authenticate, getStudentSessions);
+
+// ─── POST ROUTES ─────────────────────────────────────
 router.post(
   "/session",
   authenticate,
@@ -31,9 +40,5 @@ router.post(
   validate(markAttendanceSchema),
   markAttendance,
 );
-
-router.get("/session/:sessionId", authenticate, getSessionAttendance);
-router.get("/session/all", authenticate, getAllSessions);
-router.get("/student/:studentId/sessions", authenticate, getStudentSessions); // New route
 
 module.exports = router;
