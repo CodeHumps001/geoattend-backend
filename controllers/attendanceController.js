@@ -143,8 +143,13 @@ const getSessionAttendance = async (req, res, next) => {
   try {
     const { sessionId } = req.params;
 
-    // ✅ CRITICAL FIX: Validate sessionId exists and is a number
+    // Log the full request URL and params for debugging
+    console.log("📡 getSessionAttendance called with params:", req.params);
+    console.log("📡 Full URL:", req.originalUrl);
+
+    // Validate sessionId exists and is a number
     if (!sessionId || isNaN(Number(sessionId))) {
+      console.log("❌ Invalid sessionId received:", sessionId);
       throw new AppError("Valid session ID is required", 400);
     }
 
