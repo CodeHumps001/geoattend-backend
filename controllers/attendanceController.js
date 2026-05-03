@@ -191,4 +191,25 @@ const getSessionAttendance = async (req, res, next) => {
   }
 };
 
-module.exports = { startSession, markAttendance, getSessionAttendance };
+// GET ALL SESSIONS
+const getAllSessions = async (req, res, next) => {
+  try {
+    const sessions = await prisma.session.findMany({
+      include: {
+        course: true,
+        attendance: true,
+      },
+      orderBy: { date: "desc" },
+    });
+    return sendSuccess(res, "Sessions retrieved successfully", { sessions });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  startSession,
+  markAttendance,
+  getSessionAttendance,
+  getAllSessions,
+};

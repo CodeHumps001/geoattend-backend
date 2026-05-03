@@ -11,6 +11,7 @@ const {
   startSession,
   markAttendance,
   getSessionAttendance,
+  getAllSessions,
 } = require("../controllers/attendanceController");
 
 router.post(
@@ -28,5 +29,6 @@ router.post(
   markAttendance,
 );
 router.get("/session/:sessionId", authenticate, getSessionAttendance);
+router.get("/session/all", authenticate, getAllSessions);
 
 module.exports = router;
