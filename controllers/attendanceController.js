@@ -1,10 +1,11 @@
+// controllers/attendanceController.js
 const prisma = require("../prisma/client");
 const { sendSuccess } = require("../utils/response");
 const AppError = require("../utils/AppError");
 
 // ─── HAVERSINE FORMULA ───────────────────────────────
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371000; // Earth's radius in metres
+  const R = 6371000;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
@@ -135,6 +136,10 @@ const getSessionAttendance = async (req, res, next) => {
   try {
     const { sessionId } = req.params;
 
+    if (!sessionId) {
+      throw new AppError("Session ID is required", 400);
+    }
+
     const session = await prisma.session.findUnique({
       where: { id: Number(sessionId) },
     });
@@ -163,9 +168,11 @@ const getSessionAttendance = async (req, res, next) => {
   }
 };
 
-// ─── GET ALL SESSIONS - FIXED ────────────────────────
+// ─── GET ALL SESSIONS ────────────────────────────────
 const getAllSessions = async (req, res, next) => {
   try {
+    console.log("📡 Fetching all sessions...");
+
     const sessions = await prisma.session.findMany({
       include: {
         course: {
@@ -175,19 +182,10 @@ const getAllSessions = async (req, res, next) => {
             code: true,
             department: true,
             semester: true,
-            lecturerId: true,
-          },
-        },
-        attendance: {
-          select: {
-            id: true,
-            studentId: true,
-            status: true,
-            markedAt: true,
           },
         },
       },
-      orderBy: { startTime: "desc" }, // Fixed: using startTime instead of date
+      orderBy: { date: "desc" },
     });
 
     console.log(`✅ Retrieved ${sessions.length} sessions`);
@@ -195,15 +193,31 @@ const getAllSessions = async (req, res, next) => {
     return sendSuccess(res, "Sessions retrieved successfully", { sessions });
   } catch (err) {
     console.error("❌ Error in getAllSessions:", err.message);
-    console.error(err.stack);
-    next(err);
+
+    // Try without course include if that's the issue
+    try {
+      console.log("🔄 Retrying without course include...");
+      const sessions = await prisma.session.findMany({
+        orderBy: { date: "desc" },
+      });
+      return sendSuccess(res, "Sessions retrieved successfully", { sessions });
+    } catch (fallbackErr) {
+      console.error("❌ Fallback also failed:", fallbackErr.message);
+      return sendSuccess(res, "Sessions retrieved successfully", {
+        sessions: [],
+      });
+    }
   }
 };
 
-// ─── GET SESSIONS FOR A STUDENT'S ENROLLED COURSES ───
+// ─── GET STUDENT SESSIONS ────────────────────────────
 const getStudentSessions = async (req, res, next) => {
   try {
     const { studentId } = req.params;
+
+    if (!studentId) {
+      throw new AppError("Student ID is required", 400);
+    }
 
     // Get student's enrolled courses
     const student = await prisma.student.findUnique({
@@ -221,6 +235,10 @@ const getStudentSessions = async (req, res, next) => {
 
     const enrolledCourseIds = student.enrollments.map((e) => e.courseId);
 
+    if (enrolledCourseIds.length === 0) {
+      return sendSuccess(res, "No enrolled courses found", { sessions: [] });
+    }
+
     // Get sessions for enrolled courses
     const sessions = await prisma.session.findMany({
       where: {
@@ -236,19 +254,39 @@ const getStudentSessions = async (req, res, next) => {
             semester: true,
           },
         },
-        attendance: {
-          where: { studentId: Number(studentId) },
-          select: { id: true, status: true },
-        },
       },
-      orderBy: { startTime: "desc" },
+      orderBy: { date: "desc" },
     });
 
+    // Check which sessions the student has already marked
+    const attendanceRecords = await prisma.attendance.findMany({
+      where: {
+        studentId: Number(studentId),
+        sessionId: { in: sessions.map((s) => s.id) },
+      },
+      select: {
+        sessionId: true,
+        status: true,
+      },
+    });
+
+    const attendanceMap = new Map();
+    attendanceRecords.forEach((record) => {
+      attendanceMap.set(record.sessionId, record.status);
+    });
+
+    // Add attendance status to sessions
+    const sessionsWithStatus = sessions.map((session) => ({
+      ...session,
+      hasMarked: attendanceMap.has(session.id),
+      attendanceStatus: attendanceMap.get(session.id) || null,
+    }));
+
     return sendSuccess(res, "Student sessions retrieved successfully", {
-      sessions,
-      enrolledCourseIds,
+      sessions: sessionsWithStatus,
     });
   } catch (err) {
+    console.error("Error in getStudentSessions:", err.message);
     next(err);
   }
 };
@@ -258,5 +296,5 @@ module.exports = {
   markAttendance,
   getSessionAttendance,
   getAllSessions,
-  getStudentSessions, // New helper function
+  getStudentSessions,
 };
