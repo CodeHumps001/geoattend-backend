@@ -1,11 +1,10 @@
-// controllers/attendanceController.js
 const prisma = require("../prisma/client");
 const { sendSuccess } = require("../utils/response");
 const AppError = require("../utils/AppError");
 
 // ─── HAVERSINE FORMULA ───────────────────────────────
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
+  const R = 6371000; // Earth's radius in metres
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
@@ -67,15 +66,23 @@ const markAttendance = async (req, res, next) => {
       );
     }
 
+    // Validate IDs are numbers
+    const parsedStudentId = Number(studentId);
+    const parsedSessionId = Number(sessionId);
+
+    if (isNaN(parsedStudentId) || isNaN(parsedSessionId)) {
+      throw new AppError("Invalid studentId or sessionId", 400);
+    }
+
     const session = await prisma.session.findUnique({
-      where: { id: Number(sessionId) },
+      where: { id: parsedSessionId },
     });
     if (!session) {
       throw new AppError("Session not found", 404);
     }
 
     const student = await prisma.student.findUnique({
-      where: { id: Number(studentId) },
+      where: { id: parsedStudentId },
     });
     if (!student) {
       throw new AppError("Student not found", 404);
@@ -83,8 +90,8 @@ const markAttendance = async (req, res, next) => {
 
     const existing = await prisma.attendance.findFirst({
       where: {
-        studentId: Number(studentId),
-        sessionId: Number(sessionId),
+        studentId: parsedStudentId,
+        sessionId: parsedSessionId,
       },
     });
     if (existing) {
@@ -102,8 +109,8 @@ const markAttendance = async (req, res, next) => {
 
     const attendance = await prisma.attendance.create({
       data: {
-        studentId: Number(studentId),
-        sessionId: Number(sessionId),
+        studentId: parsedStudentId,
+        sessionId: parsedSessionId,
         latitude: Number(latitude),
         longitude: Number(longitude),
         status,
@@ -136,19 +143,22 @@ const getSessionAttendance = async (req, res, next) => {
   try {
     const { sessionId } = req.params;
 
-    if (!sessionId) {
-      throw new AppError("Session ID is required", 400);
+    // ✅ CRITICAL FIX: Validate sessionId exists and is a number
+    if (!sessionId || isNaN(Number(sessionId))) {
+      throw new AppError("Valid session ID is required", 400);
     }
 
+    const parsedSessionId = Number(sessionId);
+
     const session = await prisma.session.findUnique({
-      where: { id: Number(sessionId) },
+      where: { id: parsedSessionId },
     });
     if (!session) {
       throw new AppError("Session not found", 404);
     }
 
     const records = await prisma.attendance.findMany({
-      where: { sessionId: Number(sessionId) },
+      where: { sessionId: parsedSessionId },
       include: {
         student: {
           include: {
@@ -159,7 +169,7 @@ const getSessionAttendance = async (req, res, next) => {
     });
 
     return sendSuccess(res, "Attendance retrieved successfully", {
-      sessionId: Number(sessionId),
+      sessionId: parsedSessionId,
       count: records.length,
       records,
     });
@@ -194,7 +204,7 @@ const getAllSessions = async (req, res, next) => {
   } catch (err) {
     console.error("❌ Error in getAllSessions:", err.message);
 
-    // Try without course include if that's the issue
+    // Try fallback without course include
     try {
       console.log("🔄 Retrying without course include...");
       const sessions = await prisma.session.findMany({
@@ -203,6 +213,7 @@ const getAllSessions = async (req, res, next) => {
       return sendSuccess(res, "Sessions retrieved successfully", { sessions });
     } catch (fallbackErr) {
       console.error("❌ Fallback also failed:", fallbackErr.message);
+      // Return empty array instead of failing
       return sendSuccess(res, "Sessions retrieved successfully", {
         sessions: [],
       });
@@ -210,18 +221,20 @@ const getAllSessions = async (req, res, next) => {
   }
 };
 
-// ─── GET STUDENT SESSIONS ────────────────────────────
+// ─── GET STUDENT SESSIONS (NEW HELPER) ───────────────
 const getStudentSessions = async (req, res, next) => {
   try {
     const { studentId } = req.params;
 
-    if (!studentId) {
-      throw new AppError("Student ID is required", 400);
+    if (!studentId || isNaN(Number(studentId))) {
+      throw new AppError("Valid student ID is required", 400);
     }
+
+    const parsedStudentId = Number(studentId);
 
     // Get student's enrolled courses
     const student = await prisma.student.findUnique({
-      where: { id: Number(studentId) },
+      where: { id: parsedStudentId },
       include: {
         enrollments: {
           select: { courseId: true },
@@ -261,7 +274,7 @@ const getStudentSessions = async (req, res, next) => {
     // Check which sessions the student has already marked
     const attendanceRecords = await prisma.attendance.findMany({
       where: {
-        studentId: Number(studentId),
+        studentId: parsedStudentId,
         sessionId: { in: sessions.map((s) => s.id) },
       },
       select: {
@@ -275,7 +288,6 @@ const getStudentSessions = async (req, res, next) => {
       attendanceMap.set(record.sessionId, record.status);
     });
 
-    // Add attendance status to sessions
     const sessionsWithStatus = sessions.map((session) => ({
       ...session,
       hasMarked: attendanceMap.has(session.id),
@@ -284,6 +296,7 @@ const getStudentSessions = async (req, res, next) => {
 
     return sendSuccess(res, "Student sessions retrieved successfully", {
       sessions: sessionsWithStatus,
+      enrolledCourseIds,
     });
   } catch (err) {
     console.error("Error in getStudentSessions:", err.message);
