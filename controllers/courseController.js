@@ -1,151 +1,156 @@
 const prisma = require("../prisma/client");
-const { sendSuccess } = require("../utils/response");
-const AppError = require("../utils/AppError");
+const { sendSuccess, sendError } = require("../utils/response");
 
-// ─── CREATE COURSE ───────────────────────────────────
-const createCourse = async (req, res, next) => {
+// GET all courses in class space
+const getCourses = async (req, res, next) => {
   try {
-    const { code, name, department, semester, lecturerId } = req.body;
+    let classSpaceId;
 
-    if (!code || !name || !department || !semester || !lecturerId) {
-      throw new AppError("All fields are required", 400);
+    if (req.user.role === "COURSE_REP") {
+      classSpaceId = req.user.courseRep?.classSpace?.id;
+    } else {
+      classSpaceId = req.user.student?.classSpaceId;
     }
 
-    // Check if course code already exists
-    const existing = await prisma.course.findUnique({ where: { code } });
-    if (existing) {
-      throw new AppError(`Course with code ${code} already exists`, 409);
+    if (!classSpaceId) {
+      return sendError(res, "No class space found.", 404);
     }
 
-    const course = await prisma.course.create({
-      data: {
-        code,
-        name,
-        department,
-        semester,
-        lecturerId: Number(lecturerId),
-      },
-    });
-
-    return sendSuccess(res, "Course created successfully", { course }, 201);
-  } catch (err) {
-    next(err);
-  }
-};
-
-// ─── GET ALL COURSES ─────────────────────────────────
-const getAllCourses = async (req, res, next) => {
-  try {
     const courses = await prisma.course.findMany({
+      where: { classSpaceId },
       include: {
-        // include the lecturer and their user info
-        lecturer: {
-          include: {
-            user: { select: { name: true, email: true } },
-          },
+        sessions: {
+          include: { attendance: true },
+          orderBy: { createdAt: "desc" },
         },
+        _count: { select: { sessions: true } },
       },
+      orderBy: { createdAt: "desc" },
     });
 
-    return sendSuccess(res, "Courses retrieved successfully", {
-      count: courses.length,
+    return sendSuccess(res, "Courses retrieved.", {
       courses,
+      count: courses.length,
     });
   } catch (err) {
     next(err);
   }
 };
 
-// ─── GET COURSE BY ID ────────────────────────────────
+// GET single course
 const getCourseById = async (req, res, next) => {
   try {
-    const { id } = req.params;
-
     const course = await prisma.course.findUnique({
-      where: { id: Number(id) },
+      where: { id: Number(req.params.id) },
       include: {
-        lecturer: {
+        classSpace: {
           include: {
-            user: { select: { name: true, email: true } },
-          },
-        },
-        // include all enrolled students
-        enrollments: {
-          include: {
-            student: {
+            students: {
               include: {
-                user: { select: { name: true, email: true } },
+                user: { select: { name: true, email: true, studentId: true } },
               },
             },
           },
         },
+        sessions: {
+          include: {
+            attendance: {
+              include: {
+                student: {
+                  include: {
+                    user: {
+                      select: { name: true, email: true, studentId: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        },
       },
     });
 
     if (!course) {
-      throw new AppError(`Course with id ${id} not found`, 404);
+      return sendError(res, "Course not found.", 404);
     }
 
-    return sendSuccess(res, "Course retrieved successfully", { course });
+    return sendSuccess(res, "Course retrieved.", { course });
   } catch (err) {
     next(err);
   }
 };
 
-// ─── ENROLL STUDENT ──────────────────────────────────
-const enrollStudent = async (req, res, next) => {
+// POST create course (course rep only)
+const createCourse = async (req, res, next) => {
   try {
-    const { studentId, courseId } = req.body;
+    const { code, name, lecturerName } = req.body;
 
-    if (!studentId || !courseId) {
-      throw new AppError("studentId and courseId are required", 400);
+    if (!code || !name) {
+      return sendError(res, "Course code and name are required.", 400);
     }
 
-    // Check if student exists
-    const student = await prisma.student.findUnique({
-      where: { id: Number(studentId) },
-    });
-    if (!student) {
-      throw new AppError("Student not found", 404);
+    const classSpaceId = req.user.courseRep?.classSpace?.id;
+
+    if (!classSpaceId) {
+      return sendError(res, "You don't have a class space.", 404);
     }
 
-    // Check if course exists
-    const course = await prisma.course.findUnique({
-      where: { id: Number(courseId) },
-    });
-    if (!course) {
-      throw new AppError("Course not found", 404);
-    }
-
-    // Check if already enrolled
-    // findFirst is used here because we're checking two fields together
-    const existing = await prisma.enrollment.findFirst({
-      where: {
-        studentId: Number(studentId),
-        courseId: Number(courseId),
-      },
-    });
-
-    if (existing) {
-      throw new AppError("Student is already enrolled in this course", 409);
-    }
-
-    const enrollment = await prisma.enrollment.create({
+    const course = await prisma.course.create({
       data: {
-        studentId: Number(studentId),
-        courseId: Number(courseId),
+        code: code.trim().toUpperCase(),
+        name: name.trim(),
+        lecturerName: lecturerName?.trim() || null,
+        classSpaceId,
       },
     });
 
-    return sendSuccess(
-      res,
-      "Student enrolled successfully",
-      { enrollment },
-      201,
-    );
+    return sendSuccess(res, "Course created.", { course }, 201);
   } catch (err) {
     next(err);
   }
 };
 
-module.exports = { createCourse, getAllCourses, getCourseById, enrollStudent };
+// PUT update course
+const updateCourse = async (req, res, next) => {
+  try {
+    const { code, name, lecturerName } = req.body;
+    const courseId = Number(req.params.id);
+
+    const course = await prisma.course.update({
+      where: { id: courseId },
+      data: {
+        ...(code && { code: code.trim().toUpperCase() }),
+        ...(name && { name: name.trim() }),
+        ...(lecturerName !== undefined && {
+          lecturerName: lecturerName?.trim() || null,
+        }),
+      },
+    });
+
+    return sendSuccess(res, "Course updated.", { course });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// DELETE course
+const deleteCourse = async (req, res, next) => {
+  try {
+    await prisma.course.delete({
+      where: { id: Number(req.params.id) },
+    });
+
+    return sendSuccess(res, "Course deleted.");
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  getCourses,
+  getCourseById,
+  createCourse,
+  updateCourse,
+  deleteCourse,
+};
