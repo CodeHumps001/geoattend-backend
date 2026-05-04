@@ -1,3 +1,4 @@
+require("dotenv").config(); // ← FIXED: require dotenv properly
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -70,5 +71,12 @@ app.use((req, res) => {
 
 // ── Error handler ─────────────────────────────────────────
 app.use(errorHandler);
+
+// ── Start server ──────────────────────────────────────────
+const PORT = process.env.PORT || 3000; // ← FIXED: process.env.PORT, not env.process.PORT
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`📝 Environment: ${process.env.NODE_ENV || "development"}`);
+});
 
 module.exports = app;
