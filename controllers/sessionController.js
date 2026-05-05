@@ -1,3 +1,4 @@
+// controllers/sessionController.js
 const prisma = require("../prisma/client");
 const { sendSuccess, sendError } = require("../utils/response");
 
@@ -7,9 +8,19 @@ const getSessions = async (req, res, next) => {
     let classSpaceId;
 
     if (req.user.role === "COURSE_REP") {
-      classSpaceId = req.user.courseRep?.classSpace?.id;
+      // For course rep, get classSpaceId from their courseRep relation
+      const courseRep = await prisma.courseRep.findUnique({
+        where: { userId: req.user.id },
+        select: { classSpaceId: true },
+      });
+      classSpaceId = courseRep?.classSpaceId;
     } else {
-      classSpaceId = req.user.student?.classSpaceId;
+      // For students, fetch their student record from database
+      const student = await prisma.student.findUnique({
+        where: { userId: req.user.id },
+        select: { classSpaceId: true },
+      });
+      classSpaceId = student?.classSpaceId;
     }
 
     if (!classSpaceId) {
@@ -115,7 +126,13 @@ const startSession = async (req, res, next) => {
       );
     }
 
-    const classSpaceId = req.user.courseRep?.classSpace?.id;
+    // Get course rep's class space
+    const courseRep = await prisma.courseRep.findUnique({
+      where: { userId: req.user.id },
+      select: { classSpaceId: true },
+    });
+
+    const classSpaceId = courseRep?.classSpaceId;
 
     if (!classSpaceId) {
       return sendError(res, "You don't have a class space.", 404);
