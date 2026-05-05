@@ -9,8 +9,8 @@ const {
   closeSession,
 } = require("../controllers/sessionController");
 
-router.get("/", authenticate, getSessions);
-router.get("/:id", authenticate, getSessionById);
+router.get("/", authenticate, authorize("COURSE_REP"), getSessions);
+router.get("/:id", authenticate, authorize("COURSE_REP"), getSessionById);
 router.post("/", authenticate, authorize("COURSE_REP"), startSession);
 router.patch("/:id/close", authenticate, authorize("COURSE_REP"), closeSession);
 
