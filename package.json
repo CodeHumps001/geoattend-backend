@@ -1,27 +1,25 @@
 {
-  "name": "day-5",
+  "name": "klassrep-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node app.js",
+    "dev": "node app.js",
+    "db:push": "node -e \"process.env.NODE_TLS_REJECT_UNAUTHORIZED='0'\" && npx prisma db push",
+    "db:studio": "npx prisma studio"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^5.16.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
+    "dotenv": "^16.4.5",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
-    "morgan": "^1.10.1",
-    "zod": "^4.4.2"
+    "morgan": "^1.10.1"
   },
   "devDependencies": {
-    "prisma": "^5.22.0"
+    "prisma": "^5.16.0"
   }
 }
