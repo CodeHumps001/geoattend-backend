@@ -27,8 +27,11 @@ const register = async (req, res, next) => {
       classCode,
     } = req.body;
 
+    // Normalize email to lowercase
+    const normalizedEmail = email.toLowerCase();
+
     // Validate required fields
-    if (!name || !email || !password || !studentId || !role) {
+    if (!name || !normalizedEmail || !password || !studentId || !role) {
       return sendError(
         res,
         "Name, email, password, student ID and role are required.",
@@ -40,13 +43,13 @@ const register = async (req, res, next) => {
       return sendError(res, "Role must be STUDENT or COURSE_REP.", 400);
     }
 
-    // Check duplicates
+    // Check duplicates with normalized email
     const existingUser = await prisma.user.findFirst({
-      where: { OR: [{ email }, { studentId }] },
+      where: { OR: [{ email: normalizedEmail }, { studentId }] },
     });
 
     if (existingUser) {
-      if (existingUser.email === email) {
+      if (existingUser.email === normalizedEmail) {
         return sendError(res, "Email already registered.", 409);
       }
       return sendError(res, "Student ID already registered.", 409);
@@ -78,11 +81,11 @@ const register = async (req, res, next) => {
 
       // Create everything in a transaction
       const result = await prisma.$transaction(async (tx) => {
-        // 1. Create user
+        // 1. Create user with normalized email
         const user = await tx.user.create({
           data: {
             name,
-            email,
+            email: normalizedEmail,
             studentId,
             password: hashedPassword,
             role: "COURSE_REP",
@@ -106,7 +109,7 @@ const register = async (req, res, next) => {
           },
         });
 
-        // 4. Also create a student profile for the rep (so they can mark attendance)
+        // 4. Also create a student profile for the rep
         const student = await tx.student.create({
           data: {
             userId: user.id,
@@ -164,11 +167,11 @@ const register = async (req, res, next) => {
       }
 
       const result = await prisma.$transaction(async (tx) => {
-        // 1. Create user
+        // 1. Create user with normalized email
         const user = await tx.user.create({
           data: {
             name,
-            email,
+            email: normalizedEmail,
             studentId,
             password: hashedPassword,
             role: "STUDENT",
@@ -225,8 +228,11 @@ const login = async (req, res, next) => {
       return sendError(res, "Email and password are required.", 400);
     }
 
+    // Normalize email to lowercase for lookup
+    const normalizedEmail = email.toLowerCase();
+
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
       include: {
         student: { include: { classSpace: true } },
         courseRep: { include: { classSpace: true } },
