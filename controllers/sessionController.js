@@ -8,7 +8,6 @@ const getSessions = async (req, res, next) => {
     let classSpaceId;
 
     if (req.user.role === "COURSE_REP") {
-      // For course rep, get classSpaceId through their classSpace relation
       const courseRep = await prisma.courseRep.findUnique({
         where: { userId: req.user.id },
         include: {
@@ -19,7 +18,6 @@ const getSessions = async (req, res, next) => {
       });
       classSpaceId = courseRep?.classSpace?.id;
     } else {
-      // For students, fetch their student record from database
       const student = await prisma.student.findUnique({
         where: { userId: req.user.id },
         select: { classSpaceId: true },
@@ -102,7 +100,7 @@ const getSessionById = async (req, res, next) => {
   }
 };
 
-// POST start session (course rep only)
+// POST start session (course rep only) - WITH AUTO-MARK
 const startSession = async (req, res, next) => {
   try {
     const { courseId, latitude, longitude, radiusMeters } = req.body;
@@ -115,20 +113,28 @@ const startSession = async (req, res, next) => {
       );
     }
 
-    // Get course rep's class space
+    // Get course rep's class space AND their student profile
     const courseRep = await prisma.courseRep.findUnique({
       where: { userId: req.user.id },
       include: {
         classSpace: {
           select: { id: true },
         },
+        student: {
+          select: { id: true }, // ← Get the rep's student profile
+        },
       },
     });
 
     const classSpaceId = courseRep?.classSpace?.id;
+    const repStudentId = courseRep?.student?.id;
 
     if (!classSpaceId) {
       return sendError(res, "You don't have a class space.", 404);
+    }
+
+    if (!repStudentId) {
+      return sendError(res, "Course rep student profile not found.", 404);
     }
 
     // Check no other open session for same course
@@ -144,6 +150,7 @@ const startSession = async (req, res, next) => {
       );
     }
 
+    // Create the session
     const session = await prisma.session.create({
       data: {
         courseId: Number(courseId),
@@ -165,13 +172,35 @@ const startSession = async (req, res, next) => {
       },
     });
 
+    // 🔥 AUTO-MARK THE COURSE REP AS PRESENT
+    const attendance = await prisma.attendance.create({
+      data: {
+        studentId: repStudentId,
+        sessionId: session.id,
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        status: "PRESENT",
+      },
+      include: {
+        student: {
+          include: {
+            user: { select: { name: true, email: true, studentId: true } },
+          },
+        },
+      },
+    });
+
     return sendSuccess(
       res,
-      "Session started. Students can now mark attendance.",
-      { session },
+      "Session started. You have been automatically marked as present.",
+      {
+        session,
+        attendance, // ← Return the attendance record
+      },
       201,
     );
   } catch (err) {
+    console.error("Error starting session:", err);
     next(err);
   }
 };
