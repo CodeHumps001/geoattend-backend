@@ -30,14 +30,20 @@ const getSessions = async (req, res, next) => {
     const sessions = await prisma.session.findMany({
       where: { classSpaceId },
       include: {
-        course: true,
+        course: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            lecturerName: true,
+          },
+        },
         attendance: {
-          include: {
-            student: {
-              include: {
-                user: { select: { name: true, email: true, studentId: true } },
-              },
-            },
+          select: {
+            id: true,
+            status: true,
+            studentId: true,
+            markedAt: true,
           },
         },
         _count: { select: { attendance: true } },
@@ -50,6 +56,7 @@ const getSessions = async (req, res, next) => {
       count: sessions.length,
     });
   } catch (err) {
+    console.error("Error in getSessions:", err);
     next(err);
   }
 };
@@ -60,14 +67,12 @@ const getSessionById = async (req, res, next) => {
     const session = await prisma.session.findUnique({
       where: { id: Number(req.params.id) },
       include: {
-        course: true,
-        classSpace: {
-          include: {
-            students: {
-              include: {
-                user: { select: { name: true, email: true, studentId: true } },
-              },
-            },
+        course: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            lecturerName: true,
           },
         },
         attendance: {
@@ -87,33 +92,13 @@ const getSessionById = async (req, res, next) => {
       return sendError(res, "Session not found.", 404);
     }
 
-    const presentCount = session.attendance.filter(
-      (a) => a.status === "PRESENT",
-    ).length;
-
-    const absentCount = session.classSpace.students.length - presentCount;
-
-    return sendSuccess(res, "Session retrieved.", {
-      session,
-      stats: {
-        totalStudents: session.classSpace.students.length,
-        present: presentCount,
-        absent: absentCount,
-        attendanceRate:
-          session.classSpace.students.length > 0
-            ? (
-                (presentCount / session.classSpace.students.length) *
-                100
-              ).toFixed(1)
-            : "0",
-      },
-    });
+    return sendSuccess(res, "Session retrieved.", { session });
   } catch (err) {
     next(err);
   }
 };
 
-// POST start session (course rep only — live open/close model)
+// POST start session (course rep only)
 const startSession = async (req, res, next) => {
   try {
     const { courseId, latitude, longitude, radiusMeters } = req.body;
@@ -161,7 +146,15 @@ const startSession = async (req, res, next) => {
         startTime: new Date(),
         isOpen: true,
       },
-      include: { course: true },
+      include: {
+        course: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
+      },
     });
 
     return sendSuccess(
@@ -196,7 +189,13 @@ const closeSession = async (req, res, next) => {
       where: { id: sessionId },
       data: { isOpen: false, endTime: new Date() },
       include: {
-        course: true,
+        course: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
         attendance: true,
       },
     });
