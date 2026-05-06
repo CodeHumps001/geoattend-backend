@@ -5,11 +5,9 @@ const globalForPrisma = global;
 const prisma =
   globalForPrisma.prisma ||
   new PrismaClient({
-    log: ["error", "warn"],
+    log: process.env.NODE_ENV === "development" ? ["error"] : ["error"],
     datasources: {
-      db: {
-        url: process.env.DATABASE_URL,
-      },
+      db: { url: process.env.DATABASE_URL },
     },
   });
 
