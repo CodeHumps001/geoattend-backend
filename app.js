@@ -6,14 +6,20 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
 const errorHandler = require("./middleware/errorHandler");
+const compression = require("compression");
+
+// Add before routes
+
+const app = express();
+app.use(compression());
+
+// - Routes
 
 const authRoutes = require("./routes/authRoutes");
 const classRoutes = require("./routes/classRoutes");
 const courseRoutes = require("./routes/courseRoutes");
 const sessionRoutes = require("./routes/sessionRoutes");
 const attendanceRoutes = require("./routes/attendanceRoutes");
-
-const app = express();
 
 // ── Security ──────────────────────────────────────────────
 app.use(helmet());
