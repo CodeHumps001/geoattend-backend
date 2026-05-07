@@ -100,7 +100,7 @@ const getSessionById = async (req, res, next) => {
   }
 };
 
-// POST start session (course rep only) - WITH AUTO-MARK
+// POST start session
 const startSession = async (req, res, next) => {
   try {
     const { courseId, latitude, longitude, radiusMeters } = req.body;
@@ -113,28 +113,35 @@ const startSession = async (req, res, next) => {
       );
     }
 
-    // Get course rep's class space AND their student profile
-    const courseRep = await prisma.courseRep.findUnique({
-      where: { userId: req.user.id },
-      include: {
-        classSpace: {
-          select: { id: true },
-        },
-        student: {
-          select: { id: true }, // ← Get the rep's student profile
-        },
-      },
-    });
+    // ── Check if main rep or assistant rep ──
+    let classSpaceId = null;
 
-    const classSpaceId = courseRep?.classSpace?.id;
-    const repStudentId = courseRep?.student?.id;
-
-    if (!classSpaceId) {
-      return sendError(res, "You don't have a class space.", 404);
+    if (req.user.role === "COURSE_REP") {
+      classSpaceId = req.user.courseRep?.classSpace?.id;
+    } else if (req.user.role === "STUDENT") {
+      // Check if this student is an assistant rep
+      const assistantRep = req.user.student?.assistantRep;
+      if (!assistantRep) {
+        return sendError(
+          res,
+          "You don't have permission to start sessions.",
+          403,
+        );
+      }
+      classSpaceId = assistantRep.classSpaceId;
     }
 
-    if (!repStudentId) {
-      return sendError(res, "Course rep student profile not found.", 404);
+    if (!classSpaceId) {
+      return sendError(res, "Class space not found.", 404);
+    }
+
+    // Check the course belongs to this class space
+    const course = await prisma.course.findFirst({
+      where: { id: Number(courseId), classSpaceId },
+    });
+
+    if (!course) {
+      return sendError(res, "Course not found in your class space.", 404);
     }
 
     // Check no other open session for same course
@@ -150,7 +157,6 @@ const startSession = async (req, res, next) => {
       );
     }
 
-    // Create the session
     const session = await prisma.session.create({
       data: {
         courseId: Number(courseId),
@@ -161,15 +167,7 @@ const startSession = async (req, res, next) => {
         startTime: new Date(),
         isOpen: true,
       },
-      include: {
-        course: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
-      },
+      include: { course: true },
     });
 
     // 🔥 AUTO-MARK THE COURSE REP AS PRESENT
@@ -192,23 +190,36 @@ const startSession = async (req, res, next) => {
 
     return sendSuccess(
       res,
-      "Session started. You have been automatically marked as present.",
-      {
-        session,
-        attendance, // ← Return the attendance record
-      },
+      "Session started. Students can now mark attendance.",
+      { session },
       201,
     );
   } catch (err) {
-    console.error("Error starting session:", err);
     next(err);
   }
 };
 
-// PATCH close session (course rep only)
+// PATCH close session
 const closeSession = async (req, res, next) => {
   try {
     const sessionId = Number(req.params.id);
+
+    // Same check — allow both rep and assistant
+    let classSpaceId = null;
+
+    if (req.user.role === "COURSE_REP") {
+      classSpaceId = req.user.courseRep?.classSpace?.id;
+    } else if (req.user.role === "STUDENT") {
+      const assistantRep = req.user.student?.assistantRep;
+      if (!assistantRep) {
+        return sendError(
+          res,
+          "You don't have permission to close sessions.",
+          403,
+        );
+      }
+      classSpaceId = assistantRep.classSpaceId;
+    }
 
     const session = await prisma.session.findUnique({
       where: { id: sessionId },
@@ -218,6 +229,11 @@ const closeSession = async (req, res, next) => {
       return sendError(res, "Session not found.", 404);
     }
 
+    // Verify session belongs to their class
+    if (session.classSpaceId !== classSpaceId) {
+      return sendError(res, "You don't have access to this session.", 403);
+    }
+
     if (!session.isOpen) {
       return sendError(res, "Session is already closed.", 400);
     }
@@ -225,16 +241,7 @@ const closeSession = async (req, res, next) => {
     const closed = await prisma.session.update({
       where: { id: sessionId },
       data: { isOpen: false, endTime: new Date() },
-      include: {
-        course: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
-        attendance: true,
-      },
+      include: { course: true, attendance: true },
     });
 
     const presentCount = closed.attendance.filter(
@@ -243,10 +250,7 @@ const closeSession = async (req, res, next) => {
 
     return sendSuccess(res, "Session closed.", {
       session: closed,
-      summary: {
-        present: presentCount,
-        total: closed.attendance.length,
-      },
+      summary: { present: presentCount, total: closed.attendance.length },
     });
   } catch (err) {
     next(err);

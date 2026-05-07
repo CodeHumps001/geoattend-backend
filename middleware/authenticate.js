@@ -20,6 +20,16 @@ const authenticate = async (req, res, next) => {
           include: {
             classSpace: true,
             courseRep: true,
+            assistantRep: {
+              include: {
+                classSpace: {
+                  include: {
+                    courses: true,
+                    _count: { select: { students: true } },
+                  },
+                },
+              },
+            },
           },
         },
         courseRep: {

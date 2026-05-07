@@ -11,7 +11,7 @@ const {
 
 router.get("/", authenticate, getSessions);
 router.get("/:id", authenticate, getSessionById);
-router.post("/", authenticate, authorize("COURSE_REP"), startSession);
-router.patch("/:id/close", authenticate, authorize("COURSE_REP"), closeSession);
+router.post("/", authenticate, startSession);
+router.patch("/:id/close", authenticate, closeSession);
 
 module.exports = router;

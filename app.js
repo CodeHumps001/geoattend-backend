@@ -7,19 +7,15 @@ const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
 const errorHandler = require("./middleware/errorHandler");
 const compression = require("compression");
-
-// Add before routes
-
-const app = express();
-app.use(compression());
-
-// - Routes
-
 const authRoutes = require("./routes/authRoutes");
 const classRoutes = require("./routes/classRoutes");
 const courseRoutes = require("./routes/courseRoutes");
 const sessionRoutes = require("./routes/sessionRoutes");
 const attendanceRoutes = require("./routes/attendanceRoutes");
+const assistantRoutes = require("./routes/assistantRoutes");
+
+const app = express();
+app.use(compression());
 
 // ── Security ──────────────────────────────────────────────
 app.use(helmet());
@@ -68,6 +64,7 @@ app.use("/api/v1/class", classRoutes);
 app.use("/api/v1/courses", courseRoutes);
 app.use("/api/v1/sessions", sessionRoutes);
 app.use("/api/v1/attendance", attendanceRoutes);
+app.use("/api/v1/assistants", assistantRoutes);
 
 // ── 404 ───────────────────────────────────────────────────
 app.use((req, res) => {

@@ -5,7 +5,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  
 }
 
 model User {
@@ -28,20 +28,21 @@ enum Role {
 }
 
 model ClassSpace {
-  id           Int       @id @default(autoincrement())
+  id           Int            @id @default(autoincrement())
   name         String
   department   String
   level        Int
   academicYear String
-  classCode    String    @unique
-  createdAt    DateTime  @default(now())
+  classCode    String         @unique
+  createdAt    DateTime       @default(now())
 
-  courseRep    CourseRep  @relation(fields: [courseRepId], references: [id])
-  courseRepId  Int        @unique
+  courseRep    CourseRep      @relation(fields: [courseRepId], references: [id])
+  courseRepId  Int            @unique
 
   students     Student[]
   courses      Course[]
   sessions     Session[]
+  assistants   AssistantRep[]
 }
 
 model CourseRep {
@@ -56,22 +57,22 @@ model CourseRep {
 
   // A course rep is also a student - just reference the student directly
   studentId  Int?       @unique
-  student    Student?   @relation(fields: [studentId], references: [id])
+  student    Student?   @relation(fields: [studentId], references: [id], onDelete: SetNull)
 }
 
 model Student {
-  id           Int         @id @default(autoincrement())
+  id           Int            @id @default(autoincrement())
   department   String?
   level        Int?
 
-  user         User        @relation(fields: [userId], references: [id])
-  userId       Int         @unique
+  user         User           @relation(fields: [userId], references: [id])
+  userId       Int            @unique
 
-  classSpace   ClassSpace? @relation(fields: [classSpaceId], references: [id])
+  classSpace   ClassSpace?    @relation(fields: [classSpaceId], references: [id])
   classSpaceId Int?
 
-  // A student can optionally be a course rep (referenced by CourseRep)
-  courseRep    CourseRep?
+  courseRep    CourseRep?     
+  assistantRep AssistantRep?
 
   attendance   Attendance[]
 }
@@ -127,12 +128,23 @@ model Attendance {
   @@unique([studentId, sessionId])
 }
 
+model AssistantRep {
+  id           Int        @id @default(autoincrement())
+  createdAt    DateTime   @default(now())
+
+  // The student being promoted
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId    Int        @unique
+
+  // The class space they assist
+  classSpace   ClassSpace @relation(fields: [classSpaceId], references: [id], onDelete: Cascade)
+  classSpaceId Int
+
+  @@unique([studentId, classSpaceId])
+}
+
 enum AttendanceStatus {
   PRESENT
   ABSENT
   LATE
 }
-
-
-
-
