@@ -16,6 +16,7 @@ const assistantRoutes = require("./routes/assistantRoutes");
 
 const app = express();
 app.use(compression());
+app.set("trust proxy", 1);
 
 // ── Security ──────────────────────────────────────────────
 app.use(helmet());
