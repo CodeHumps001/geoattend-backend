@@ -7,11 +7,13 @@ const {
   getSessionById,
   startSession,
   closeSession,
+  deleteSession,
 } = require("../controllers/sessionController");
 
 router.get("/", authenticate, getSessions);
 router.get("/:id", authenticate, getSessionById);
 router.post("/", authenticate, startSession);
 router.patch("/:id/close", authenticate, closeSession);
+router.delete("/:id", authenticate, authorize("COURSE_REP"), deleteSession);
 
 module.exports = router;
