@@ -270,33 +270,65 @@ const login = async (req, res, next) => {
 // ── Me ────────────────────────────────────────────────────
 const getMe = async (req, res, next) => {
   try {
+    // req.user is already populated by authenticate middleware
+    // Re-fetch to get absolutely fresh data
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        studentId: true,
-        role: true,
-        createdAt: true,
-        student: {
-          include: {
-            classSpace: {
-              include: {
-                courseRep: {
-                  include: { user: { select: { name: true, email: true } } },
-                },
-                _count: { select: { students: true, courses: true } },
-              },
-            },
-          },
-        },
+      include: {
         courseRep: {
           include: {
             classSpace: {
               include: {
-                courses: true,
-                _count: { select: { students: true } },
+                courses: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                    lecturerName: true,
+                  },
+                },
+                _count: {
+                  select: { students: true, sessions: true, courses: true },
+                },
+              },
+            },
+            student: { select: { id: true } },
+          },
+        },
+        student: {
+          include: {
+            classSpace: {
+              include: {
+                courses: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                    lecturerName: true,
+                  },
+                },
+                _count: {
+                  select: { students: true, sessions: true, courses: true },
+                },
+              },
+            },
+            assistantRep: {
+              include: {
+                classSpace: {
+                  include: {
+                    courses: {
+                      select: {
+                        id: true,
+                        code: true,
+                        name: true,
+                        lecturerName: true,
+                      },
+                    },
+                    _count: {
+                      select: { students: true, sessions: true, courses: true },
+                    },
+                  },
+                },
               },
             },
           },

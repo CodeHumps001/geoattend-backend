@@ -7,7 +7,7 @@ const authenticate = async (req, res, next) => {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return sendError(res, "Access denied. No token provided.", 401);
+      return sendError(res, "No token provided. Please login.", 401);
     }
 
     const token = authHeader.split(" ")[1];
@@ -16,47 +16,87 @@ const authenticate = async (req, res, next) => {
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
       include: {
+        // ── Course Rep profile ──────────────────────────
+        courseRep: {
+          include: {
+            classSpace: {
+              include: {
+                courses: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                    lecturerName: true,
+                  },
+                },
+                _count: {
+                  select: { students: true, sessions: true, courses: true },
+                },
+              },
+            },
+            student: {
+              select: { id: true },
+            },
+          },
+        },
+
+        // ── Student profile ─────────────────────────────
         student: {
           include: {
-            classSpace: true,
-            courseRep: true,
+            classSpace: {
+              include: {
+                courses: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                    lecturerName: true,
+                  },
+                },
+                _count: {
+                  select: { students: true, sessions: true, courses: true },
+                },
+              },
+            },
+            // 🔥 THIS IS THE KEY FIX — include assistantRep
             assistantRep: {
               include: {
                 classSpace: {
                   include: {
-                    courses: true,
-                    _count: { select: { students: true } },
+                    courses: {
+                      select: {
+                        id: true,
+                        code: true,
+                        name: true,
+                        lecturerName: true,
+                      },
+                    },
+                    _count: {
+                      select: { students: true, sessions: true, courses: true },
+                    },
                   },
                 },
               },
             },
           },
         },
-        courseRep: {
-          include: {
-            classSpace: {
-              include: {
-                courses: true,
-                _count: { select: { students: true } },
-              },
-            },
-            student: true,
-          },
-        },
       },
     });
 
     if (!user) {
-      return sendError(res, "User not found.", 401);
+      return sendError(res, "User not found. Please login again.", 401);
     }
 
     req.user = user;
     next();
   } catch (err) {
-    if (err.name === "TokenExpiredError") {
-      return sendError(res, "Token expired. Please log in again.", 401);
+    if (err.name === "JsonWebTokenError") {
+      return sendError(res, "Invalid token. Please login again.", 401);
     }
-    return sendError(res, "Invalid token.", 401);
+    if (err.name === "TokenExpiredError") {
+      return sendError(res, "Token expired. Please login again.", 401);
+    }
+    next(err);
   }
 };
 
